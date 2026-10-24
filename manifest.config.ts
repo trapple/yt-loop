@@ -38,6 +38,7 @@ export default defineManifest({
   name: "yt-loop",
   version: packageVersion(),
   description: "YouTube の指定した範囲を繰り返し再生する",
+  homepage_url: "https://github.com/trapple/yt-loop",
   permissions: ["storage"],
   icons,
   content_scripts: [

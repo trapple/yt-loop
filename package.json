@@ -1,14 +1,17 @@
 {
   "name": "yt-loop",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "package": "npm run build && node scripts/package.mjs",
+    "screenshots": "npm run build && node scripts/screenshots.mjs",
+    "preversion": "npm run typecheck && npm test"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.28",
