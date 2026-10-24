@@ -1,5 +1,5 @@
 import { YT_SELECTORS } from "@/content/selectors";
-import { canSetEnd, type LoopState } from "@/shared/loop";
+import { canSetEnd, completeRange, type LoopState } from "@/shared/loop";
 import { formatTime } from "@/shared/time";
 
 export type ContextMenuCallbacks = {
@@ -10,6 +10,8 @@ export type ContextMenuCallbacks = {
   onSetStart(sec: number): void;
   onSetEnd(sec: number): void;
   onClear(): void;
+  /** 今の範囲を載せた URL をクリップボードへ写す */
+  onShare(): void;
 };
 
 export type ContextMenu = {
@@ -21,12 +23,13 @@ export type ContextMenu = {
 /** 足した項目の目印。差し直しのときに自分の項目を見分ける */
 const OWN_ATTR = "data-yt-loop";
 
-type ItemKind = "start" | "end" | "clear";
+type ItemKind = "start" | "end" | "clear" | "share";
 
 const LABELS: Record<ItemKind, string> = {
   start: "ここからループ",
   end: "ここまでループ",
   clear: "ループ範囲を解除",
+  share: "ループを URL で共有する",
 };
 
 /** 押せない項目。YouTube の項目には押せない状態の見た目が無いので自前で薄くする */
@@ -60,7 +63,9 @@ export function createContextMenu(callbacks: ContextMenuCallbacks): ContextMenu 
     start: createItem("start"),
     end: createItem("end"),
     clear: createItem("clear"),
+    share: createItem("share"),
   };
+  const order = [items.start, items.end, items.clear, items.share];
   /** 右クリックした時点の再生位置。項目を押した時点ではない (メニューを開いている間も動画は進む) */
   let clickedSec: number | null = null;
   /** 右クリックした位置 (文書の座標)。メニューの縦の位置を決める */
@@ -83,6 +88,8 @@ export function createContextMenu(callbacks: ContextMenuCallbacks): ContextMenu 
       const sec = clickedSec;
       if (kind === "clear") {
         callbacks.onClear();
+      } else if (kind === "share") {
+        callbacks.onShare();
       } else if (sec !== null) {
         if (kind === "start") callbacks.onSetStart(sec);
         else callbacks.onSetEnd(sec);
@@ -93,6 +100,7 @@ export function createContextMenu(callbacks: ContextMenuCallbacks): ContextMenu 
   bind("start");
   bind("end");
   bind("clear");
+  bind("share");
 
   function setDisabled(item: HTMLElement, disabled: boolean): void {
     item.setAttribute("aria-disabled", String(disabled));
@@ -110,6 +118,8 @@ export function createContextMenu(callbacks: ContextMenuCallbacks): ContextMenu 
     setDisabled(items.end, clickedSec === null || !canSetEnd(state, clickedSec));
     // 消すものが無いときは出さない。[hidden] は .ytp-menuitem の display に負けるので style で消す
     items.clear.style.display = state.startSec === null && state.endSec === null ? "none" : "";
+    // 共有できるのは範囲がそろっているときだけ
+    items.share.style.display = completeRange(state) === null ? "none" : "";
   }
 
   /**
@@ -122,8 +132,8 @@ export function createContextMenu(callbacks: ContextMenuCallbacks): ContextMenu 
     const loopItem = list.querySelector(YT_SELECTORS.loopMenuItem);
     const after = loopItem ?? list.firstElementChild;
     if (items.start.previousElementSibling !== after || items.start.parentElement !== list) {
-      if (after === null) list.prepend(items.start, items.end, items.clear);
-      else after.after(items.start, items.end, items.clear);
+      if (after === null) list.prepend(...order);
+      else after.after(...order);
     }
     paint();
     const height = fitHeight(menu, list);

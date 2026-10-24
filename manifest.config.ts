@@ -47,7 +47,9 @@ export default defineManifest({
       // 動画へ移ってもドキュメントの読み込みが起きず、/watch* だけだと content script が入らない
       matches: ["https://www.youtube.com/*"],
       js: ["src/content/youtube.ts"],
-      run_at: "document_idle",
+      // YouTube は読み込みの途中で知らないクエリ (yt-loop-start / yt-loop-end) を URL から消す。
+      // document_idle では間に合わないので、消される前に読めるよう最初に動かす
+      run_at: "document_start",
     },
   ],
 });

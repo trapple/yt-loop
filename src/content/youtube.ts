@@ -1,6 +1,7 @@
 import { createContextMenu } from "@/content/context-menu";
 import { createProgressBand } from "@/content/progress-band";
 import { YT_SELECTORS } from "@/content/selectors";
+import { showToast } from "@/content/toast";
 import {
   EMPTY_LOOP,
   becameComplete,
@@ -8,8 +9,10 @@ import {
   setEnd,
   setStart,
   shouldJumpBack,
+  type CompleteRange,
   type LoopState,
 } from "@/shared/loop";
+import { buildShareUrl, readUrlLoop, type UrlLoop } from "@/shared/share-url";
 import { loadLoop, saveLoop } from "@/shared/storage";
 
 /** 動画ページなら動画 ID (URL を見分ける鍵)。それ以外 (ホーム・検索・ショート) は null */
@@ -45,6 +48,12 @@ let loadToken = 0;
  * 読み込み中の false で上書き保存しないよう、最初に再生が始まるまで待つ (onMediaEvent の playing)
  */
 let loopSyncArmed = false;
+/**
+ * URL のクエリで指定された、まだ当てていない範囲 (README「URL でループを指定する」)。
+ * YouTube は読み込みの途中でクエリを URL から消すので、見つけた時点 (起動時・リンクのクリック) で取っておき、
+ * その動画の状態を読むときに当てる
+ */
+let pendingUrlLoop: UrlLoop | null = null;
 
 const menu = createContextMenu({
   currentSec() {
@@ -65,6 +74,7 @@ const menu = createContextMenu({
   onClear() {
     apply({ ...EMPTY_LOOP });
   },
+  onShare,
 });
 
 const band = createProgressBand();
@@ -173,6 +183,74 @@ function onContextMenu(event: MouseEvent): void {
   menu.onContextMenu(event);
 }
 
+// ---- URL でのループの指定と共有 ----
+
+/** URL で指定された範囲を当てる。共有された URL はループするためのものなので「ループ再生」もオンにする */
+function applyUrlLoop(range: CompleteRange): void {
+  const video = mainVideo();
+  if (video !== null) video.loop = true;
+  commit({ ...range, enabled: true });
+}
+
+/** その動画に向けて取っておいた範囲を取り出す。別の動画のものなら捨てる (後で同じ動画を開いたときに古い範囲を当てない) */
+function takeUrlLoop(id: string): CompleteRange | null {
+  const pending = pendingUrlLoop;
+  pendingUrlLoop = null;
+  return pending !== null && pending.videoId === id ? pending.range : null;
+}
+
+/**
+ * YouTube の中のリンクを押した移動 (SPA 遷移) はページを読み込み直さないので、押したリンクの URL から範囲を読む。
+ * 修飾キー付き・中ボタンは新しいタブで開く (そのタブが自分で URL を読む) ので見ない
+ */
+function onLinkClick(event: MouseEvent): void {
+  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+  if (!(event.target instanceof Element)) return;
+  const link = event.target.closest<HTMLAnchorElement>("a[href]");
+  if (link === null) return;
+  const found = readUrlLoop(link.href);
+  if (found === null) return;
+  // 今見ている動画へのリンクなら動画は変わらない (onVideoChanged が走らない)。ここで当てる
+  if (found.videoId === videoId) {
+    applyUrlLoop(found.range);
+    return;
+  }
+  pendingUrlLoop = found;
+}
+
+function onShare(): void {
+  const range = completeRange(state);
+  if (videoId === null || range === null) return;
+  copyText(buildShareUrl(videoId, range)).then(
+    () => showToast("ループの URL をコピーしました"),
+    (error: unknown) => {
+      console.warn("[yt-loop] URL をコピーできませんでした", error);
+      showToast("URL をコピーできませんでした");
+    },
+  );
+}
+
+/**
+ * クリップボードへ写す。navigator.clipboard は文書にフォーカスが無いと断られるので、そのときは
+ * 選択してコピーする古い方法に倒す (YouTube 自身の「動画の URL をコピー」も同じ方法を持っている)
+ */
+async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    // 下の方法を試す
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.style.cssText = "position:fixed;top:0;left:0;opacity:0;";
+  document.body.append(area);
+  area.select();
+  const copied = document.execCommand("copy");
+  area.remove();
+  if (!copied) throw new Error("execCommand('copy') が失敗しました");
+}
+
 // ---- SPA 遷移と再描画への追従 ----
 
 /** 動画が変わったら、その URL で覚えた状態を読み、覚えていたオン / オフを戻す */
@@ -189,10 +267,17 @@ function onVideoChanged(nextId: string | null): void {
     .then((loaded) => {
       if (token !== loadToken) return;
       videoId = nextId;
-      state = loaded;
-      // 覚えていなければ「ループ再生」には触らない (README「動作の決まり」)
+      // URL で指定されていれば、覚えていた範囲より優先し、覚え直す (開き直しても同じ範囲になるように)
+      const fromUrl = takeUrlLoop(nextId);
+      if (fromUrl !== null) {
+        commit({ ...fromUrl, enabled: true });
+      } else {
+        state = loaded;
+      }
+      // 覚えていなければ「ループ再生」には触らない (README「動作の決まり」)。
+      // video がまだ無い (document_start で起動した直後) ときは、最初の playing で当てる
       const video = mainVideo();
-      if (completeRange(loaded) !== null && video !== null) video.loop = loaded.enabled;
+      if (completeRange(state) !== null && video !== null) video.loop = state.enabled;
       // もう再生中なら playing は来ない。ここで写し始める
       if (video !== null && !video.paused) loopSyncArmed = true;
       render();
@@ -225,16 +310,25 @@ function onPageMutated(): void {
   });
 }
 
+/**
+ * document_start で起動する (manifest)。**最初に URL を読む:** YouTube は読み込みの途中でクエリを消す。
+ * body はまだ無いので、DOM の監視は documentElement に張る
+ */
 function start(): void {
+  pendingUrlLoop = readUrlLoop(location.href);
   lastVideoId = currentVideoId();
   onVideoChanged(lastVideoId);
-  new MutationObserver(onPageMutated).observe(document.body, { childList: true, subtree: true });
+  new MutationObserver(onPageMutated).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
   // yt-navigate-finish は YouTube 自身が SPA 遷移の終わりに出す。DOM の変化を待たずに追従できる
   document.addEventListener("yt-navigate-finish", onPageMutated);
   for (const type of ["timeupdate", "playing", "loadedmetadata", "durationchange"]) {
     document.addEventListener(type, onMediaEvent, true);
   }
   document.addEventListener("contextmenu", onContextMenu, true);
+  document.addEventListener("click", onLinkClick, true);
 }
 
 start();
