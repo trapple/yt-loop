@@ -14,7 +14,7 @@ export type ContextMenuCallbacks = {
 
 export type ContextMenu = {
   /** プレイヤーの上で右クリックされた。メニューが開いた後に項目を差し、表示を合わせる */
-  onContextMenu(): void;
+  onContextMenu(event: MouseEvent): void;
   destroy(): void;
 };
 
@@ -63,6 +63,8 @@ export function createContextMenu(callbacks: ContextMenuCallbacks): ContextMenu 
   };
   /** 右クリックした時点の再生位置。項目を押した時点ではない (メニューを開いている間も動画は進む) */
   let clickedSec: number | null = null;
+  /** 右クリックした位置 (文書の座標)。メニューの縦の位置を決める */
+  let clickedPageY: number | null = null;
   let openFrame = 0;
 
   function close(menu: Element): void {
@@ -124,10 +126,12 @@ export function createContextMenu(callbacks: ContextMenuCallbacks): ContextMenu 
       else after.after(items.start, items.end, items.clear);
     }
     paint();
-    fitHeight(menu, list);
+    const height = fitHeight(menu, list);
+    placeVertically(menu, height);
   }
 
-  function fitHeight(menu: HTMLElement, list: HTMLElement): void {
+  /** 中身に合わせて高さを直し、その高さを返す */
+  function fitHeight(menu: HTMLElement, list: HTMLElement): number {
     const panel = list.closest<HTMLElement>(".ytp-panel");
     // 固定を外してから中身の高さを測る。固定したままだと、解除を隠して項目が減ったときに縮まない
     list.style.height = "";
@@ -135,17 +139,30 @@ export function createContextMenu(callbacks: ContextMenuCallbacks): ContextMenu 
     for (const el of [menu, panel, list]) {
       if (el !== null) el.style.height = `${height}px`;
     }
-    // 下へはみ出す分だけ上へずらす。YouTube は足す前の高さで位置を決めている
-    const container = menu.offsetParent;
-    if (container instanceof HTMLElement) {
-      const overflow = menu.offsetTop + height - container.clientHeight;
-      if (overflow > 0) menu.style.top = `${Math.max(0, menu.offsetTop - overflow)}px`;
-    }
+    return height;
+  }
+
+  /**
+   * 縦の位置を右クリックした位置に置き直す。画面の下へはみ出す分だけ上へずらす。
+   *
+   * **YouTube の決めた位置を使わない。** 項目を足して高くなったメニューを、YouTube は 2 回目以降の右クリックで
+   * どこを押しても画面の上端 (top:0) に置く (2026-10 の実測。足さない素の状態では押した位置に出る)。
+   * メニューは body 直下の絶対配置なので、top は文書の座標で書く
+   */
+  function placeVertically(menu: HTMLElement, height: number): void {
+    if (clickedPageY === null) return;
+    const viewportBottom = window.scrollY + window.innerHeight;
+    const top =
+      clickedPageY + height > viewportBottom
+        ? Math.max(window.scrollY, viewportBottom - height)
+        : clickedPageY;
+    menu.style.top = `${top}px`;
   }
 
   return {
-    onContextMenu(): void {
+    onContextMenu(event: MouseEvent): void {
       clickedSec = callbacks.currentSec();
+      clickedPageY = event.pageY;
       // メニューは YouTube の contextmenu の処理で作られ・開かれる。その後に触る
       cancelAnimationFrame(openFrame);
       openFrame = requestAnimationFrame(() => {

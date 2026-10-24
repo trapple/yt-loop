@@ -170,7 +170,7 @@ function onContextMenu(event: MouseEvent): void {
   if (currentVideoId() === null) return;
   const player = document.querySelector(YT_SELECTORS.player);
   if (player === null || !(event.target instanceof Node) || !player.contains(event.target)) return;
-  menu.onContextMenu();
+  menu.onContextMenu(event);
 }
 
 // ---- SPA 遷移と再描画への追従 ----

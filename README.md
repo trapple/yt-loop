@@ -40,6 +40,7 @@ YouTube のプレイヤーを右クリックしたときに出る標準のメニ
 - メニュー (`.ytp-popup.ytp-contextmenu`) は**最初の右クリックで作られる**。それまで DOM に無い
 - 標準「ループ再生」は `.ytp-menuitem[role=menuitemcheckbox]` で、`video.loop` と連動する。`video.loop` を直接書き換えると、次に開いたときのチェック表示も追従する
 - メニューの高さはポップアップ・`.ytp-panel`・`.ytp-panel-menu` にインラインで固定されている。項目を足したら 3 つとも高さを直す
+- 項目を足して高くなったメニューを、YouTube は 2 回目以降の右クリックでどこを押しても画面の上端 (`top:0`) に置く。足さない素の状態では押した位置に出るので、縦の位置は拡張が右クリックした位置に置き直す
 - 閉じるには Escape を送る。`display:none` で隠すと YouTube の内部状態は「開いている」ままで、次の右クリックで開かなくなる
 
 ## 必要な権限
@@ -57,7 +58,11 @@ npm run build      # dist/ にビルド
 npm test           # 単体テスト (vitest)
 npm run typecheck
 npm run icons      # public/icons/ を描き直す (Playwright の Chromium を使う)
+npm run package    # ストアへ上げる zip を release/ に作る
+npm run screenshots # ストア掲載用のスクリーンショットを release/screenshots/ に撮る
 ```
+
+ストアへの公開手順は [docs/store-release.md](docs/store-release.md)、プライバシーポリシーは [docs/privacy-policy.md](docs/privacy-policy.md)。
 
 Chrome の `chrome://extensions` でデベロッパーモードをオンにし、「パッケージ化されていない拡張機能を読み込む」で `dist/` を選ぶ。
 
@@ -73,4 +78,4 @@ Chrome の `chrome://extensions` でデベロッパーモードをオンにし�
 | `src/shared/time.ts` | 時刻の整形 |
 | `src/shared/storage.ts` | URL ごとの範囲の保存と読み込み |
 
-参考: [yt-clip](../yt-clip) (同じ作者の切り抜き拡張。SPA 追従とシークバーの帯の作り方を踏襲)
+参考: [yt-clip](https://github.com/trapple/yt-clip) (同じ作者の切り抜き拡張。SPA 追従とシークバーの帯の作り方を踏襲)
