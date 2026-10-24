@@ -47,7 +47,11 @@ https://www.youtube.com/watch?v=vzQcOVGZEig&t=12234s&yt-loop-start=12234&yt-loop
 - 「ここからループ」は常に押せる。B 以降に置いたら B を消す (A から決め直す操作)
 - 「ここまでループ」は A より 0.2 秒以上後でなければ押せない (薄く表示して押しても何もしない)
 - 位置は**右クリックした時点**の再生位置を使う。メニューを開いている間も動画は進むので、項目を押した時点の位置ではない
-- **B を過ぎたら A へ戻す。A より前は戻さない。** 利用者が A の手前へシークすると、そこから流れて範囲に入る (前奏から入りたい場合のため)
+- **再生が B をまたいだら A へ戻す。シークで飛んだ先は戻さない。**
+  - A の手前へシークすると、そこから流れて範囲に入る (前奏から入りたい場合のため)
+  - B より後へシークすると (シークバー・タイムスタンプのリンクなど)、ループを抜けてそこから普通に再生する。範囲の中へシークし直せば、また B で戻る
+  - 「ここまでループ」を押したときにもう B を過ぎていたら (メニューを開いている間も動画は進む)、その場で A へ戻す
+- A へ戻すときは YouTube 自身のシーク (`movie_player.seekTo`) を使う (下記)
 - B が動画の末尾に近い場合は、末尾の 0.25 秒手前で折り返す。末尾まで行くと標準のループが動画の先頭へ戻してしまうため
 - 広告の再生中 (`#movie_player.ad-showing`) は何もしない
 - 再生位置の見張りは `requestAnimationFrame` (タブが見えている間の精度) と `timeupdate` (背景タブでも届く。約 250ms 間隔) の両方で行う。背景タブでは B を最大 250ms ほど過ぎてから戻ることがある
@@ -62,6 +66,11 @@ https://www.youtube.com/watch?v=vzQcOVGZEig&t=12234s&yt-loop-start=12234&yt-loop
 - メニューの高さはポップアップ・`.ytp-panel`・`.ytp-panel-menu` にインラインで固定されている。項目を足したら 3 つとも高さを直す
 - 項目を足して高くなったメニューを、YouTube は 2 回目以降の右クリックでどこを押しても画面の上端 (`top:0`) に置く。足さない素の状態では押した位置に出るので、縦の位置は拡張が右クリックした位置に置き直す
 - 閉じるには Escape を送る。`display:none` で隠すと YouTube の内部状態は「開いている」ままで、次の右クリックで開かなくなる
+
+## 実装上の注意 (シーク)
+
+- **`video.currentTime` を直接書き換えてシークしない。** YouTube が自分でシークしている最中 (タイムスタンプのリンクを踏んだ直後など) に書き換えると、YouTube の思っている位置と動画の位置がずれ、読み込み中のまま止まる (2026-10 に実機で発生)
+- `movie_player.seekTo` はページの JavaScript (main world) にしか見えない。main world で動く小さな content script (`src/main-world/seek-bridge.ts`) を置き、拡張の側 (isolated world) からは DOM のイベントで頼む。橋が見つからないときだけ `video.currentTime` に倒す
 
 ## 実装上の注意 (URL のクエリ)
 
@@ -99,6 +108,7 @@ Chrome の `chrome://extensions` でデベロッパーモードをオンにし�
 | `src/content/youtube.ts` | content script の入口。SPA 遷移の追従、ループの見張り、URL ごとの状態の読み書き |
 | `src/content/context-menu.ts` | 右クリックメニューへの項目の差し込み |
 | `src/content/progress-band.ts` | シークバーに重ねる帯 |
+| `src/main-world/seek-bridge.ts` | ページの側 (main world) で YouTube のシークを呼ぶ橋。content script とモジュールを共有しない (共有するとビルドが非同期のローダー経由に変える) |
 | `src/content/toast.ts` | プレイヤーの上に短く出す知らせ (URL をコピーしたとき) |
 | `src/content/selectors.ts` | YouTube の DOM セレクタの集約 |
 | `src/shared/loop.ts` | 範囲の検査・折り返し判定などの純粋な関数 (テスト対象) |

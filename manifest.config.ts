@@ -51,5 +51,12 @@ export default defineManifest({
       // document_idle では間に合わないので、消される前に読めるよう最初に動かす
       run_at: "document_start",
     },
+    {
+      // YouTube 自身のシーク (movie_player.seekTo) を呼ぶ橋。ページの JavaScript からしか見えないので main world で動かす
+      matches: ["https://www.youtube.com/*"],
+      js: ["src/main-world/seek-bridge.ts"],
+      run_at: "document_start",
+      world: "MAIN",
+    },
   ],
 });

@@ -6,6 +6,7 @@ import {
   EMPTY_LOOP,
   becameComplete,
   completeRange,
+  isPastEnd,
   setEnd,
   setStart,
   shouldJumpBack,
@@ -14,6 +15,15 @@ import {
 } from "@/shared/loop";
 import { buildShareUrl, readUrlLoop, type UrlLoop } from "@/shared/share-url";
 import { loadLoop, saveLoop } from "@/shared/storage";
+
+/*
+ * main world の橋 (src/main-world/seek-bridge.ts) との取り決め。**橋にも同じ値を書いてある (変えるときは両方)。**
+ * 共有のモジュールに切り出さない理由は橋の側のコメント。食い違いは tests/content/seek-bridge.test.ts が見る
+ */
+/** document に投げるイベントの名前。detail はシーク先の秒数 (数値) */
+const SEEK_EVENT = "yt-loop:seek";
+/** 橋が動いている印。橋が documentElement に立てる */
+const BRIDGE_READY_ATTR = "data-yt-loop-seek-bridge";
 
 /** 動画ページなら動画 ID (URL を見分ける鍵)。それ以外 (ホーム・検索・ショート) は null */
 function currentVideoId(): string | null {
@@ -70,6 +80,12 @@ const menu = createContextMenu({
     // メニューは置けない位置では押せなくしてある。届いたら表示と判定がずれている
     if (next === null) throw new Error(`[yt-loop] B を置けない位置です: ${sec}`);
     apply(next);
+    // メニューを開いている間も動画は進むので、押した時点でもう B を過ぎていることがある。
+    // 「またいだら戻す」だけだと、このままループに入らずに流れていく (README「動作の決まり」)
+    const video = mainVideo();
+    if (video !== null && state.startSec !== null && isPastEnd(state, video.currentTime, video.duration)) {
+      seekTo(state.startSec);
+    }
   },
   onClear() {
     apply({ ...EMPTY_LOOP });
@@ -120,14 +136,42 @@ function syncEnabled(video: HTMLVideoElement): void {
   if (video.loop !== state.enabled) commit({ ...state, enabled: video.loop });
 }
 
-/** B を過ぎていたら A へ戻す */
+/**
+ * 前に見た再生位置。B をまたいだかを決めるのに使う。**シークのたびに null に戻す** (飛んだ先が B より後でも
+ * 「またいだ」と取り違えないように。onMediaEvent の seeking と、checkLoop の video.seeking)
+ */
+let lastSec: number | null = null;
+
+/**
+ * YouTube 自身のシークで動かす。**`video.currentTime` を直接書き換えない:** YouTube のシークの最中に割り込むと
+ * 読み込み中のまま止まる (README「実装上の注意 (シーク)」)。main world の橋が無いときだけ直接動かす
+ */
+function seekTo(sec: number): void {
+  lastSec = null;
+  if (document.documentElement.hasAttribute(BRIDGE_READY_ATTR)) {
+    document.dispatchEvent(new CustomEvent(SEEK_EVENT, { detail: sec }));
+    return;
+  }
+  const video = mainVideo();
+  if (video !== null) video.currentTime = sec;
+}
+
+/** 再生が B をまたいだら A へ戻す */
 function checkLoop(): void {
   const video = mainVideo();
   if (video === null || isAdShowing() || state.startSec === null) return;
   syncEnabled(video);
-  if (shouldJumpBack(state, video.currentTime, video.duration)) {
-    video.currentTime = state.startSec;
+  // シークの最中。seeking のイベントより先にここへ来ることがあるので、フラグでも見る
+  if (video.seeking) {
+    lastSec = null;
+    return;
   }
+  const current = video.currentTime;
+  if (shouldJumpBack(state, lastSec, current, video.duration)) {
+    seekTo(state.startSec);
+    return;
+  }
+  lastSec = current;
 }
 
 let frame = 0;
@@ -162,6 +206,10 @@ function onMediaEvent(event: Event): void {
   switch (event.type) {
     case "timeupdate":
       checkLoop();
+      break;
+    case "seeking":
+      // シークで飛んだ。飛んだ先から数え直す (B より後へ飛んだならループを抜ける)
+      lastSec = null;
       break;
     case "playing":
       if (!loopSyncArmed && videoId !== null && !isAdShowing()) {
@@ -258,6 +306,7 @@ function onVideoChanged(nextId: string | null): void {
   videoId = null;
   state = { ...EMPTY_LOOP };
   loopSyncArmed = false;
+  lastSec = null;
   syncWatch();
   render();
   if (nextId === null) return;
@@ -324,7 +373,7 @@ function start(): void {
   });
   // yt-navigate-finish は YouTube 自身が SPA 遷移の終わりに出す。DOM の変化を待たずに追従できる
   document.addEventListener("yt-navigate-finish", onPageMutated);
-  for (const type of ["timeupdate", "playing", "loadedmetadata", "durationchange"]) {
+  for (const type of ["timeupdate", "seeking", "playing", "loadedmetadata", "durationchange"]) {
     document.addEventListener(type, onMediaEvent, true);
   }
   document.addEventListener("contextmenu", onContextMenu, true);

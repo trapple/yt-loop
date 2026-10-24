@@ -6,6 +6,7 @@ import {
   effectiveEnd,
   setEnd,
   setStart,
+  isPastEnd,
   shouldJumpBack,
   type LoopState,
 } from "@/shared/loop";
@@ -53,27 +54,40 @@ describe("becameComplete", () => {
 });
 
 describe("shouldJumpBack", () => {
-  it("B を過ぎたら戻す", () => {
-    expect(shouldJumpBack(looping, 19.9, 100)).toBe(false);
-    expect(shouldJumpBack(looping, 20, 100)).toBe(true);
+  it("再生が B をまたいだら戻す", () => {
+    expect(shouldJumpBack(looping, 19.8, 19.9, 100)).toBe(false);
+    expect(shouldJumpBack(looping, 19.9, 20, 100)).toBe(true);
+  });
+
+  it("シークで B より後へ飛んだ後は戻さない (前の位置が無い / もう B 以降)", () => {
+    expect(shouldJumpBack(looping, null, 41, 100)).toBe(false);
+    expect(shouldJumpBack(looping, 41, 41.1, 100)).toBe(false);
   });
 
   it("A より前は戻さない (前奏から入れる)", () => {
-    expect(shouldJumpBack(looping, 5, 100)).toBe(false);
+    expect(shouldJumpBack(looping, 4.9, 5, 100)).toBe(false);
   });
 
   it("オフなら戻さない", () => {
-    expect(shouldJumpBack({ ...looping, enabled: false }, 30, 100)).toBe(false);
+    expect(shouldJumpBack({ ...looping, enabled: false }, 19.9, 20, 100)).toBe(false);
   });
 
   it("B が末尾なら末尾の手前で折り返す", () => {
     const toEnd = { startSec: 10, endSec: 100, enabled: true };
     expect(effectiveEnd(toEnd, 100)).toBe(100 - END_GUARD_SEC);
-    expect(shouldJumpBack(toEnd, 99.8, 100)).toBe(true);
+    expect(shouldJumpBack(toEnd, 99.7, 99.8, 100)).toBe(true);
   });
 
   it("長さが分からない (ライブ) なら B のまま", () => {
     expect(effectiveEnd(looping, Infinity)).toBe(20);
     expect(effectiveEnd(looping, NaN)).toBe(20);
+  });
+});
+
+describe("isPastEnd", () => {
+  it("オンで B 以降なら真", () => {
+    expect(isPastEnd(looping, 20, 100)).toBe(true);
+    expect(isPastEnd(looping, 19.9, 100)).toBe(false);
+    expect(isPastEnd({ ...looping, enabled: false }, 30, 100)).toBe(false);
   });
 });

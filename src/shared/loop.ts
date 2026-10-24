@@ -81,17 +81,27 @@ export function effectiveEnd(range: CompleteRange, durationSec: number): number 
   return Math.min(range.endSec, guarded);
 }
 
-/**
- * 今の再生位置から A へ戻すべきか。**B を過ぎたときだけ戻す。** A より前は戻さない:
- * 利用者が A の手前へシークしたら、そこから流れて範囲に入る (前奏から入りたい場合のため)
- */
-export function shouldJumpBack(
-  state: LoopState,
-  currentSec: number,
-  durationSec: number,
-): boolean {
+/** 今の位置がもう折り返す位置を過ぎているか (オンで範囲がそろっているときだけ真) */
+export function isPastEnd(state: LoopState, currentSec: number, durationSec: number): boolean {
   if (!state.enabled) return false;
   const range = completeRange(state);
   if (range === null) return false;
   return currentSec >= effectiveEnd(range, durationSec);
+}
+
+/**
+ * A へ戻すべきか。**再生が B をまたいだときだけ戻す** (前に見た位置が B より手前で、今が B 以降)。
+ *
+ * 「今 B 以降か」だけで決めない: シークで B より後へ飛んだとき (タイムスタンプのリンクなど) に A へ引き戻すと、
+ * 利用者の操作を打ち消すうえ、YouTube のシークの最中に割り込んで読み込み中のまま止まる (README「動作の決まり」)。
+ * シークの後は前の位置を null にして渡すこと (またいだかどうかが分からない)。A より前もシークで入れば戻さない
+ */
+export function shouldJumpBack(
+  state: LoopState,
+  prevSec: number | null,
+  currentSec: number,
+  durationSec: number,
+): boolean {
+  if (prevSec === null) return false;
+  return !isPastEnd(state, prevSec, durationSec) && isPastEnd(state, currentSec, durationSec);
 }
