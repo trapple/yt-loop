@@ -144,7 +144,7 @@ let lastSec: number | null = null;
 
 /**
  * YouTube 自身のシークで動かす。**`video.currentTime` を直接書き換えない:** YouTube のシークの最中に割り込むと
- * 読み込み中のまま止まる (README「実装上の注意 (シーク)」)。main world の橋が無いときだけ直接動かす
+ * 読み込み中のまま止まる (docs/development.md「実装上の注意 (シーク)」)。main world の橋が無いときだけ直接動かす
  */
 function seekTo(sec: number): void {
   lastSec = null;

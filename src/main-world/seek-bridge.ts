@@ -3,7 +3,7 @@
  *
  * `movie_player.seekTo` は YouTube のプレイヤーが要素に足したメソッドで、ページの JavaScript からしか見えない。
  * `video.currentTime` を直接書き換えると YouTube の思っている位置とずれ、読み込み中のまま止まることがある
- * (README「実装上の注意 (シーク)」)。**この world では chrome.* を使えない** ので、DOM のイベントだけで受ける
+ * (docs/development.md「実装上の注意 (シーク)」)。**この world では chrome.* を使えない** ので、DOM のイベントだけで受ける
  */
 
 /*

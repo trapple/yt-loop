@@ -11,7 +11,7 @@ export const END_GUARD_SEC = 0.25;
 
 /**
  * URL ごとに覚える状態。A / B は片方ずつ決まり、未設定は null。
- * `enabled` は標準「ループ再生」(`video.loop`) の写し。**正は video.loop の側** (README「できること」)
+ * `enabled` は標準「ループ再生」(`video.loop`) の写し。**正は video.loop の側** (docs/development.md「動作の決まりの実装」)
  */
 export type LoopState = {
   startSec: number | null;

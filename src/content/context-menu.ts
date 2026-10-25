@@ -73,7 +73,7 @@ export function createContextMenu(callbacks: ContextMenuCallbacks): ContextMenu 
   let openFrame = 0;
 
   function close(menu: Element): void {
-    // display:none で隠すと YouTube の内部状態は開いたままで、次の右クリックで開かなくなる (README の実測)。
+    // display:none で隠すと YouTube の内部状態は開いたままで、次の右クリックで開かなくなる (docs/development.md の実測)。
     // 標準の閉じ方 (Escape) を使う
     menu.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", code: "Escape", keyCode: 27, bubbles: true }),
@@ -124,7 +124,7 @@ export function createContextMenu(callbacks: ContextMenuCallbacks): ContextMenu 
 
   /**
    * 標準「ループ再生」の直後に差す。メニューが作り直されていたら差し直す。
-   * 差したら高さを直す (YouTube は開くときに高さをインラインで固定する。README の実測)
+   * 差したら高さを直す (YouTube は開くときに高さをインラインで固定する。docs/development.md の実測)
    */
   function inject(menu: HTMLElement): void {
     const list = menu.querySelector<HTMLElement>(".ytp-panel-menu");
