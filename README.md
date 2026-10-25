@@ -6,6 +6,8 @@ YouTube の動画の指定した範囲 (A〜B) を繰り返し再生する Chrom
 YouTube のプレイヤーを右クリックしたときに出る標準のメニュー (「ループ再生」がある所) を拡張する。
 画面に新しいパネルは足さない。
 
+![右クリックメニューに「ここからループ」「ここまでループ」「ループ範囲を解除」「ループを URL で共有する」が並び、シークバーにループ範囲の帯が出ている画面](docs/images/menu.png)
+
 ## できること
 
 プレイヤーの右クリックメニューの「ループ再生」の下に、次の項目を足す。
@@ -43,10 +45,10 @@ https://www.youtube.com/watch?v=vzQcOVGZEig&t=12234s&yt-loop-start=12234&yt-loop
 
 ## 動作の決まり
 
-- **ループは A と B の両方が決まり、`B - A >= 0.2 秒` のときだけ効く**
+- ループは A と B の両方が決まり、`B - A >= 0.2 秒` のときだけ効く
 - 「ここからループ」は常に押せる。B 以降に置いたら B を消す (A から決め直す操作)
 - 「ここまでループ」は A より 0.2 秒以上後でなければ押せない (薄く表示して押しても何もしない)
-- 位置は**右クリックした時点**の再生位置を使う。メニューを開いている間も動画は進むので、項目を押した時点の位置ではない
+- A と B には**右クリックした時点**の再生位置を使う。メニューを開いている間も動画は進むので、項目を押した時点の位置ではない
 - **再生が B をまたいだら A へ戻す。シークで飛んだ先は戻さない。**
   - A の手前へシークすると、そこから流れて範囲に入る (前奏から入りたい場合のため)
   - B より後へシークすると (シークバー・タイムスタンプのリンクなど)、ループを抜けてそこから普通に再生する。範囲の中へシークし直せば、また B で戻る
@@ -61,7 +63,7 @@ https://www.youtube.com/watch?v=vzQcOVGZEig&t=12234s&yt-loop-start=12234&yt-loop
 
 2026-10 時点の実測。
 
-- メニュー (`.ytp-popup.ytp-contextmenu`) は**最初の右クリックで作られる**。それまで DOM に無い
+- メニュー (`.ytp-popup.ytp-contextmenu`) は最初の右クリックで作られる。それまで DOM に無い
 - 標準「ループ再生」は `.ytp-menuitem[role=menuitemcheckbox]` で、`video.loop` と連動する。`video.loop` を直接書き換えると、次に開いたときのチェック表示も追従する
 - メニューの高さはポップアップ・`.ytp-panel`・`.ytp-panel-menu` にインラインで固定されている。項目を足したら 3 つとも高さを直す
 - 項目を足して高くなったメニューを、YouTube は 2 回目以降の右クリックでどこを押しても画面の上端 (`top:0`) に置く。足さない素の状態では押した位置に出るので、縦の位置は拡張が右クリックした位置に置き直す
@@ -70,20 +72,20 @@ https://www.youtube.com/watch?v=vzQcOVGZEig&t=12234s&yt-loop-start=12234&yt-loop
 ## 実装上の注意 (シーク)
 
 - **`video.currentTime` を直接書き換えてシークしない。** YouTube が自分でシークしている最中 (タイムスタンプのリンクを踏んだ直後など) に書き換えると、YouTube の思っている位置と動画の位置がずれ、読み込み中のまま止まる (2026-10 に実機で発生)
-- `movie_player.seekTo` はページの JavaScript (main world) にしか見えない。main world で動く小さな content script (`src/main-world/seek-bridge.ts`) を置き、拡張の側 (isolated world) からは DOM のイベントで頼む。橋が見つからないときだけ `video.currentTime` に倒す
+- `movie_player.seekTo` はページの JavaScript (main world) にしか見えない。main world で動く小さな content script (`src/main-world/seek-bridge.ts`) を置き、拡張の側 (isolated world) からは DOM のイベントで頼む。橋が見つからないときだけ `video.currentTime` を直接書き換える
 
 ## 実装上の注意 (URL のクエリ)
 
 - **YouTube は読み込みの途中で知らないクエリを URL から消す** (`domcontentloaded` の時点では残っていて、動画が読み込まれた後には無い。2026-10 の実測)。そのため content script は `document_start` で動かし、起動した時点で URL を読む
 - YouTube の中のリンクを押した移動 (SPA 遷移) ではページを読み込み直さないので、リンクのクリックを捕まえてその URL から読む
-- クリップボードへの書き込みは、メニューの項目を押した操作の中で `navigator.clipboard.writeText` を使う。追加の権限は要らない
+- メニューの項目を押した操作の中で、`navigator.clipboard.writeText` でクリップボードへ書き込む。追加の権限は要らない
 
 ## 必要な権限
 
 | 権限 | 理由 |
 | --- | --- |
 | `storage` | URL ごとの範囲を覚える |
-| content script `https://www.youtube.com/*` | メニューの項目とシークバーの帯を差す。YouTube の中の移動は SPA なので `/watch` に絞らない (動画ページ以外では何もしない) |
+| content script `https://www.youtube.com/*` | メニューの項目とシークバーの帯を差し込む。YouTube の中の移動は SPA なので `/watch` に絞らない (動画ページ以外では何もしない) |
 
 ## 開発
 
@@ -97,9 +99,9 @@ npm run package    # ストアへ上げる zip を release/ に作る
 npm run screenshots # ストア掲載用のスクリーンショットを release/screenshots/ に撮る
 ```
 
-ストアへの公開手順は [docs/store-release.md](docs/store-release.md)、プライバシーポリシーは [docs/privacy-policy.md](docs/privacy-policy.md)。
-
 Chrome の `chrome://extensions` でデベロッパーモードをオンにし、「パッケージ化されていない拡張機能を読み込む」で `dist/` を選ぶ。
+
+ストアへの公開手順は [docs/store-release.md](docs/store-release.md)、プライバシーポリシーは [docs/privacy-policy.md](docs/privacy-policy.md)。
 
 ## 構成
 
